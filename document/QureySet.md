@@ -52,3 +52,132 @@ query 속성은 불투명 한 객체. 이는 쿼리 작성의 내부를 나타�
 일반적으로 QuerySet과 상호 작용할 때 필터를 연결하여 사용합니다. 이 작업을 수행하기 위해 대부분의 QuerySet 메소드는 새로운 쿼리 세트를 반환합니다. 이러한 방법은이 섹션의 뒷부분에서 자세히 설명합니다.
 
 QuerySet 클래스에는 인트로 스펙트에 사용할 수있는 두 개의 공용 속성이 있습니다.
+
+* **ordered**
+	QuerySet이 순서가 맞으면 true입니다. 즉, 모델에 order_by () 절이 있거나 기본 순서가 있습니다. 그렇지 않으면 False.
+* **db**
+	이 쿼리가 지금 실행될 경우 사용할 데이터베이스입니다.
+
+## 새로운 QuerySets을 반환하는 Methods
+Django는 QuerySet에 의해 리턴 된 결과의 타입이나 SQL 쿼리가 실행되는 방식을 변경하는 다양한 QuerySet 세분화 메소드를 제공.
+###filter()
+####filter(**kwargs)
+주어진 조회 매개 변수와 일치하는 개체를 포함하는 새로운 검색어 세트를 돌려줍니다.
+
+조회 매개 변수 (** kwargs)는 아래 필드 조회에 설명 된 형식이어야합니다. 여러 매개 변수는 기본 SQL 문에서 AND를 통해 조인됩니다.
+
+더 복잡한 쿼리 (예 : OR 문을 사용하는 쿼리)를 실행해야하는 경우 Q 개체를 사용할 수 있습니다.
+****
+###exclude()
+####exclude**kwargs)
+지정된 조회 매개 변수와 일치하지 않는 객체가 포함 된 새 QuerySet을 반환
+
+조회 매개 변수 (** kwargs)는 아래 필드 조회에 설명 된 형식이어야합니다. 여러 매개 변수는 기본 SQL 문에서 AND를 통해 조인되며 모든 것은 NOT ()으로 묶입니다.
+
+다음 예에서는 pub_date가 2005-1-3보다 늦고 제목이 "Hello"인 모든 항목을 제외.
+```
+Entry.objects.exclude(pub_date__gt=datetime.date(2005, 1, 3), headline='Hello')
+```
+SQL 용어로 다음과 같이 반영됩니다.
+```
+SELECT ...
+WHERE NOT (pub_date > '2005-1-3' AND headline = 'Hello')
+```
+다음 예에서는 pub_date가 2005-1-3보다 늦거나 모든 제목이 "Hello"인 모든 항목을 제외.
+```
+Entry.objects.exclude(pub_date__gt=datetime.date(2005, 1, 3)).exclude(headline='Hello')
+```
+SQL 용어로 다음과 같이 반영됩니다.
+```
+SELECT ...
+WHERE NOT pub_date > '2005-1-3'
+AND NOT headline = 'Hello'
+```
+두 번째 예제는 더 제한적.
+더 복잡한 쿼리 (예 : OR 문을 사용하는 쿼리)를 실행해야하는 경우 Q 개체를 사용할 수 있음.
+****
+###annotate()
+####annotate(*args, **kwargs)
+제공된 쿼리 식 목록으로 QuerySet의 각 개체에 주석을 첨부합니다. 표현식은 간단한 값, 모델의 필드에 대한 참조 (또는 모든 관련 모델), 또는 QuerySet의 오브젝트와 관련된 오브젝트에 대해 계산 된 집계 표현식 (평균, 합계 등).
+
+annotate ()에 대한 각 인수는 반환되는 QuerySet의 각 객체에 추가되는 주석입니다.
+
+Django가 제공하는 집계 함수는 아래의 집계 함수에 설명되어 있습니다.
+
+키워드 인수를 사용하여 지정된 주석은이 키워드를 주석의 별칭으로 사용합니다. 익명 인수에는 집계 함수의 이름과 집계중인 모델 필드를 기반으로 별칭이 생성됩니다. 단일 필드를 참조하는 집계 식만 익명 인수가 될 수 있습니다. 다른 모든 것은 키워드 인수 여야합니다.
+
+예를 들어 블로그 목록을 조작하는 경우 각 블로그에서 몇 개의 항목이 작성되었는지 확인할 수 있습니다.
+```
+>>> from django.db.models import Count
+>>> q = Blog.objects.annotate(Count('entry'))
+# The name of the first blog
+>>> q[0].name
+'Blogasaurus'
+# The number of entries on the first blog
+>>> q[0].entry__count
+42
+```
+블로그 모델은 entry__count 속성 자체를 정의하지 않지만 키워드 인수를 사용하여 집계 함수를 지정하면 주석의 이름을 제어 할 수 있습니다.
+```
+>>> q = Blog.objects.annotate(number_of_entries=Count('entry'))
+# The number of entries on the first blog, using the name provided
+>>> q[0].number_of_entries
+42
+```
+****
+###order_by()
+####order_by(*fields)
+기본적으로 QuerySet에 의해 반환 된 결과는 모델 메타의 정렬 옵션에 의해 주어진 순서 튜플에 의해 정렬됩니다. order_by 메소드를 사용하여 QuerySet 단위로이 값을 겹쳐 쓸 수 있습니다.
+예:
+```
+Entry.objects.filter(pub_date__year=2005).order_by('-pub_date', 'headline')
+```
+참고 : order_by ( '?') 쿼리는 사용하는 데이터베이스 백엔드에 따라 값이 무겁고 느릴 수 있음.
+다른 모델의 필드로 정렬하려면 모델 관계를 쿼리 할 때와 같은 구문을 사용하십시오. 즉, 필드 이름과 이중 밑줄 (__), 새 모델의 필드 이름 등이 포함됩니다. 원하는 모델을 추가 할 수 있습니다. 예 :
+```
+Entry.objects.order_by('blog__name', 'headline')
+```
+Django는 다른 모델과 관계가있는 필드로 정렬을 시도하면 관련 모델의 기본 순서를 사용하거나 Meta.ordering이 지정되지 않은 경우 관련 모델의 기본 키순으로 정렬합니다. 예를 들어, 블로그 모델에는 기본 순서가 지정되어 있지 않기 때문에 :
+```
+Entry.objects.order_by('blog')
+```
+...와 동일합니다.
+```
+Entry.objects.order_by('blog__id')
+```
+Blog가 ordering = [ 'name'] 인 경우 첫 번째 쿼리 세트는 다음과 같습니다.
+```
+Entry.objects.order_by('blog__name')
+```
+관련 필드의 _id를 참조하여 JOIN의 비용을 들이지 않고 관련 필드에서 쿼리 세트를 주문할 수도 있습니다.
+```
+# No Join
+Entry.objects.order_by('blog_id')
+
+# Join
+Entry.objects.order_by('blog__id')
+```
+표현식에서 asc () 또는 desc ()를 호출하여 쿼리 식으로 정렬 할 수도 있습니다.
+```
+Entry.objects.order_by(Coalesce('summary', 'headline').desc())
+```
+
+****
+###reverse()
+####reverse()
+reverse () 메서드를 사용하여 쿼리 세트의 요소가 반환되는 순서를 바꿉니다. reverse ()를 다시 호출하면 순서가 정상 방향으로 복원됩니다.
+
+queryset에서 "마지막"다섯 항목을 검색하려면 다음을 수행 할 수 있습니다.
+```
+my_queryset.reverse()[:5]
+```
+이것은 파이썬에서 시퀀스의 끝에서부터 슬라이싱하는 것과 완전히 같지 않음에 유의하십시오. 위의 예제는 마지막 항목을 먼저 반환하고, 마지막에서 두 번째 항목을 반환합니다. 파이썬 시퀀스가 ​​있고 seq [-5 :]를 보면, 다섯 번째 마지막 항목이 먼저 보입니다. Django는 SQL에서 효율적으로 수행 할 수 없으므로 마지막부터 슬라이싱하는 액세스 모드를 지원하지 않습니다.
+
+또한 reverse ()는 일반적으로 정의 된 순서가있는 QuerySet에서만 호출되어야합니다 (예 : 기본 순서를 정의하는 모델을 쿼리하거나 order_by ()를 사용할 때). 주어진 QuerySet에 대해 그러한 정렬이 정의되어 있지 않으면 reverse ()를 호출하면 실제 효과가 없습니다. reverse ()를 호출하기 전에 정렬이 정의되지 않았으며 나중에 정의되지 않습니다.
+
+****
+###distinct()
+####distinct(*fields)
+SQL 쿼리에서 SELECT DISTINCT를 사용하는 새 QuerySet을 반환합니다. 이렇게하면 조회 결과에서 중복 행이 제거됩니다.
+
+기본적으로 QuerySet은 중복 행을 제거하지 않습니다. 실제로 Blog.objects.all ()과 같은 간단한 쿼리는 결과 행이 중복 될 가능성이 있기 때문에 거의 문제가되지 않습니다. 그러나 쿼리가 여러 테이블에 걸쳐있는 경우 QuerySet을 평가할 때 중복 결과를 얻을 수 있습니다. 그것은 distinct ()를 사용할 때입니다.
